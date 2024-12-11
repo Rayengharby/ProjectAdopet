@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:projet/FakeDogDatabase.dart';
+import 'package:projet/AddDogScreen.dart';
+import 'package:projet/EditDogScreen.dart';
+import 'package:projet/model/Owner.dart';
+import 'detailscreen_dog.dart';
 import 'package:projet/model/Dog.dart';
+import 'package:projet/services/api_service.dart';
 
 void main() {
   runApp(const MyApp());
@@ -23,45 +27,109 @@ class MyApp extends StatelessWidget {
   }
 }
 
-// Configuration GoRouter avec tout dans main.dart
+final ApiService apiService = ApiService();
+
 final GoRouter _router = GoRouter(
   initialLocation: '/',
   routes: [
-    // Route pour la liste des chiens
     GoRoute(
       path: '/',
       builder: (context, state) => const DogListScreen(),
     ),
-    // Route pour les détails du chien
     GoRoute(
-      path: '/details/:id',
+      path: '/details',
+      builder: (context, state) => DogDetailScreen(
+        dog: state.extra as Dog,
+      ),
+    ),
+    GoRoute(
+      path: '/add-dog',
+      builder: (context, state) => const AddDogScreen(),  
+    ),
+    GoRoute(
+      path: '/edit-dog',
       builder: (context, state) {
-        final id = int.parse(state.pathParameters['id']!);
-        final dog = dogList.firstWhere((dog) => dog.id == id);
-        return DogDetailScreen(dog: dog);
+        final dog = state.extra as Dog; 
+        return EditDogScreen(dog: dog); 
       },
     ),
   ],
 );
 
-class DogListScreen extends StatelessWidget {
+class DogListScreen extends StatefulWidget {
   const DogListScreen({super.key});
+
+  @override
+  State<DogListScreen> createState() => DogListScreenState();
+}
+
+class DogListScreenState extends State<DogListScreen> {
+  late Future<List<Dog>> futureDogs;
+
+  @override
+  void initState() {
+    super.initState();
+    futureDogs = apiService.fetchDogs(); 
+  }
+
+  void refreshDogs() {
+    setState(() {
+      futureDogs = apiService.fetchDogs(); 
+    });
+  }
+
+  void navigateToAddDog() async {
+    final result = await context.push('/add-dog'); 
+    if (result == true) {
+      refreshDogs(); 
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Dogs for Adoption"),
-      ),
-      body: ListView.builder(
-        itemCount: dogList.length,
-        itemBuilder: (context, index) {
-          final dog = dogList[index];
-          return GestureDetector(
-            onTap: () {
-              context.push('/details/${dog.id}');
+        title: const Text("Chiens à adopter"),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.add),
+            onPressed: () {
+              context.push('/add-dog'); 
             },
-            child: DogCard(dog: dog),
+          ),
+        ],
+      ),
+      body: FutureBuilder<List<Dog>>(
+        future: futureDogs,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          final dogs = snapshot.data ?? [];
+          if (dogs.isEmpty) {
+            return const Center(child: Text("Aucun chien disponible"));
+          }
+
+          return ListView.builder(
+            itemCount: dogs.length,
+            itemBuilder: (context, index) {
+              final dog = dogs[index];
+              return GestureDetector(
+                onTap: () => context.push('/details', extra: dog),
+                child: DogCard(
+                  dog: dog,
+                  onDelete: () {
+                    apiService.deleteDog(dog.id).then((_) {
+                      refreshDogs(); 
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Chien supprimé')),
+                      );
+                    });
+                  },
+                ),
+              );
+            },
           );
         },
       ),
@@ -71,8 +139,9 @@ class DogListScreen extends StatelessWidget {
 
 class DogCard extends StatelessWidget {
   final Dog dog;
+  final VoidCallback onDelete;
 
-  const DogCard({super.key, required this.dog});
+  const DogCard({super.key, required this.dog, required this.onDelete});
 
   @override
   Widget build(BuildContext context) {
@@ -94,8 +163,8 @@ class DogCard extends StatelessWidget {
         children: [
           ClipRRect(
             borderRadius: BorderRadius.circular(10),
-            child: Image.asset(
-              dog.image,
+            child: Image.network(
+              dog.imageUrl ?? 'assets/default_dog.png',
               height: 60,
               width: 60,
               fit: BoxFit.cover,
@@ -108,120 +177,27 @@ class DogCard extends StatelessWidget {
               children: [
                 Text(
                   dog.name,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 5),
                 Text(
-                  '${dog.age} yrs | ${dog.color}',
+                  '${dog.age} ans | ${dog.color ?? "Inconnu"}',
                   style: const TextStyle(color: Colors.grey),
-                ),
-                const SizedBox(height: 5),
-                Row(
-                  children: [
-                    const Icon(Icons.location_on, color: Colors.red, size: 14),
-                    Text(
-                      "${dog.location} away",
-                      style: const TextStyle(fontSize: 12),
-                    ),
-                  ],
                 ),
               ],
             ),
           ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-            decoration: BoxDecoration(
-              color: dog.gender == 'Male' ? Colors.blue[50] : Colors.pink[50],
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Text(
-              dog.gender,
-              style: TextStyle(
-                color: dog.gender == 'Male' ? Colors.blue : Colors.pink,
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
+          IconButton(
+            icon: const Icon(Icons.edit, color: Colors.blue),
+            onPressed: () {
+              context.push('/edit-dog', extra: dog); 
+            },
+          ),
+          IconButton(
+            icon: const Icon(Icons.delete, color: Colors.red),
+            onPressed: onDelete,
           ),
         ],
-      ),
-    );
-  }
-}
-
-// Écran de détail pour les chiens
-class DogDetailScreen extends StatelessWidget {
-  final Dog dog;
-
-  const DogDetailScreen({super.key, required this.dog});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(dog.name),
-      ),
-      body: SingleChildScrollView( // Ajout du SingleChildScrollView
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(15),
-                  child: Image.asset(
-                    dog.image,
-                    height: 200,
-                    width: double.infinity,
-                    fit: BoxFit.cover,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 20),
-              Text(
-                dog.name,
-                style: const TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 10),
-              Text(
-                'Age: ${dog.age} years',
-                style: const TextStyle(fontSize: 16),
-              ),
-              const SizedBox(height: 5),
-              Text(
-                'Gender: ${dog.gender}',
-                style: const TextStyle(fontSize: 16),
-              ),
-              const SizedBox(height: 5),
-              Text(
-                'Color: ${dog.color}',
-                style: const TextStyle(fontSize: 16),
-              ),
-              const SizedBox(height: 5),
-              Text(
-                'Weight: ${dog.weight} kg',
-                style: const TextStyle(fontSize: 16),
-              ),
-              const SizedBox(height: 10),
-              Text(
-                'About: ${dog.about}',
-                style: const TextStyle(fontSize: 16),
-              ),
-              const SizedBox(height: 10),
-              Text(
-                'Owner: ${dog.owner.name}',
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-            ],
-          ),
-        ),
       ),
     );
   }
