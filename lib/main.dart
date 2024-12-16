@@ -6,8 +6,15 @@ import 'package:projet/model/Owner.dart';
 import 'detailscreen_dog.dart';
 import 'package:projet/model/Dog.dart';
 import 'package:projet/services/api_service.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'firebase_options.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
   runApp(const MyApp());
 }
 
@@ -30,10 +37,18 @@ class MyApp extends StatelessWidget {
 final ApiService apiService = ApiService();
 
 final GoRouter _router = GoRouter(
-  initialLocation: '/',
+  initialLocation: '/login',
   routes: [
     GoRoute(
-      path: '/',
+      path: '/login',
+      builder: (context, state) => const SignInPage(),
+    ),
+    GoRoute(
+      path: '/sign-up',
+      builder: (context, state) => const SignUpPage(), // Page d'inscription
+    ),
+    GoRoute(
+      path: '/home',
       builder: (context, state) => const DogListScreen(),
     ),
     GoRoute(
@@ -44,13 +59,13 @@ final GoRouter _router = GoRouter(
     ),
     GoRoute(
       path: '/add-dog',
-      builder: (context, state) => const AddDogScreen(),  
+      builder: (context, state) => const AddDogScreen(),
     ),
     GoRoute(
       path: '/edit-dog',
       builder: (context, state) {
-        final dog = state.extra as Dog; 
-        return EditDogScreen(dog: dog); 
+        final dog = state.extra as Dog;
+        return EditDogScreen(dog: dog);
       },
     ),
   ],
@@ -69,19 +84,33 @@ class DogListScreenState extends State<DogListScreen> {
   @override
   void initState() {
     super.initState();
-    futureDogs = apiService.fetchDogs(); 
+    futureDogs = apiService.fetchDogs();
   }
 
   void refreshDogs() {
     setState(() {
-      futureDogs = apiService.fetchDogs(); 
+      futureDogs = apiService.fetchDogs();
     });
   }
 
   void navigateToAddDog() async {
-    final result = await context.push('/add-dog'); 
+    final result = await context.push('/add-dog');
     if (result == true) {
-      refreshDogs(); 
+      refreshDogs();
+    }
+  }
+
+  Future<void> signOut() async {
+    try {
+      await FirebaseAuth.instance.signOut();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Déconnexion réussie')),
+      );
+      context.go('/login');
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Une erreur est survenue lors de la déconnexion')),
+      );
     }
   }
 
@@ -94,8 +123,12 @@ class DogListScreenState extends State<DogListScreen> {
           IconButton(
             icon: const Icon(Icons.add),
             onPressed: () {
-              context.push('/add-dog'); 
+              context.push('/add-dog');
             },
+          ),
+          IconButton(
+            icon: const Icon(Icons.logout),
+            onPressed: signOut,  //deconnecter  
           ),
         ],
       ),
@@ -121,7 +154,7 @@ class DogListScreenState extends State<DogListScreen> {
                   dog: dog,
                   onDelete: () {
                     apiService.deleteDog(dog.id).then((_) {
-                      refreshDogs(); 
+                      refreshDogs();
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(content: Text('Chien supprimé')),
                       );
@@ -136,6 +169,7 @@ class DogListScreenState extends State<DogListScreen> {
     );
   }
 }
+
 
 class DogCard extends StatelessWidget {
   final Dog dog;
@@ -190,7 +224,7 @@ class DogCard extends StatelessWidget {
           IconButton(
             icon: const Icon(Icons.edit, color: Colors.blue),
             onPressed: () {
-              context.push('/edit-dog', extra: dog); 
+              context.push('/edit-dog', extra: dog);
             },
           ),
           IconButton(
@@ -198,6 +232,212 @@ class DogCard extends StatelessWidget {
             onPressed: onDelete,
           ),
         ],
+      ),
+    );
+  }
+}
+//authennnnnnnnnnnnnnnnnnnnnnnnntification
+// Page d'inscription
+class SignUpPage extends StatefulWidget {
+  const SignUpPage({super.key});
+
+  @override
+  State<SignUpPage> createState() => _SignUpPageState();
+}
+
+class _SignUpPageState extends State<SignUpPage> {
+  final _formKey = GlobalKey<FormState>();
+  String? email;
+  String? password;
+
+  Future<void> signUp(String email, String password) async {
+    try {
+      await FirebaseAuth.instance.createUserWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Compte créé pour $email')),
+      );
+      Navigator.pop(context);
+    } on FirebaseAuthException catch (e) {
+      String errorMessage = 'Une erreur est survenue.';
+      if (e.code == 'weak-password') {
+        errorMessage = 'Le mot de passe est trop faible.';
+      } else if (e.code == 'email-already-in-use') {
+        errorMessage = 'Cet email est déjà utilisé.';
+      }
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(errorMessage)));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Sign Up'),
+        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Form(
+          key: _formKey,
+          child: Column(
+            children: <Widget>[
+              TextFormField(
+                decoration: const InputDecoration(
+                  labelText: 'Email',
+                  icon: Icon(Icons.email),
+                ),
+                keyboardType: TextInputType.emailAddress,
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Veuillez entrer une adresse email';
+                  }
+                  return null;
+                },
+                onSaved: (value) {
+                  email = value;
+                },
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                decoration: const InputDecoration(
+                  labelText: 'Mot de passe',
+                  icon: Icon(Icons.lock),
+                ),
+                obscureText: true,
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Veuillez entrer un mot de passe';
+                  }
+                  return null;
+                },
+                onSaved: (value) {
+                  password = value;
+                },
+              ),
+              const SizedBox(height: 16),
+              Center(
+                child: ElevatedButton(
+                  onPressed: () {
+                    if (_formKey.currentState!.validate()) {
+                      _formKey.currentState!.save();
+                      signUp(email!, password!);
+                    }
+                  },
+                  child: const Text("S'inscrire"),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// Page de Connexion
+class SignInPage extends StatefulWidget {
+  const SignInPage({super.key});
+
+  @override
+  State<SignInPage> createState() => _SignInPageState();
+}
+
+class _SignInPageState extends State<SignInPage> {
+  final _formKey = GlobalKey<FormState>();
+  String? email;
+  String? password;
+
+  Future<void> signIn(String email, String password) async {
+    try {
+      await FirebaseAuth.instance.signInWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Bienvenue $email')),
+      );
+      context.go('/home');
+    } on FirebaseAuthException catch (e) {
+      String errorMessage = 'Une erreur est survenue.';
+      if (e.code == 'user-not-found') {
+        errorMessage = 'Aucun utilisateur trouvé pour cet email.';
+      } else if (e.code == 'wrong-password') {
+        errorMessage = 'Mot de passe incorrect.';
+      }
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(errorMessage)));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Connexion'),
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Form(
+          key: _formKey,
+          child: Column(
+            children: <Widget>[
+              TextFormField(
+                decoration: const InputDecoration(
+                  labelText: 'Email',
+                  icon: Icon(Icons.email),
+                ),
+                keyboardType: TextInputType.emailAddress,
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Veuillez entrer une adresse email';
+                  }
+                  return null;
+                },
+                onSaved: (value) {
+                  email = value;
+                },
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                decoration: const InputDecoration(
+                  labelText: 'Mot de passe',
+                  icon: Icon(Icons.lock),
+                ),
+                obscureText: true,
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Veuillez entrer un mot de passe';
+                  }
+                  return null;
+                },
+                onSaved: (value) {
+                  password = value;
+                },
+              ),
+              const SizedBox(height: 16),
+              Center(
+                child: ElevatedButton(
+                  onPressed: () {
+                    if (_formKey.currentState!.validate()) {
+                      _formKey.currentState!.save();
+                      signIn(email!, password!);
+                    }
+                  },
+                  child: const Text("Se connecter"),
+                ),
+              ),
+              const SizedBox(height: 8),
+              TextButton(
+                onPressed: () {
+                  context.push('/sign-up');
+                },
+                child: const Text("Pas encore inscrit ? S'inscrire"),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

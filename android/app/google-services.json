@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "834665412930",
+    "project_id": "projetadopetauthentification",
+    "storage_bucket": "projetadopetauthentification.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:834665412930:android:14612663837c86303730db",
+        "android_client_info": {
+          "package_name": "com.example.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCMfgZCbduqSyvEr2I42G-P1jIb1bDfuMk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
